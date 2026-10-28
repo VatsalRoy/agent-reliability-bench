@@ -1,0 +1,11 @@
+metric,value,ci_low,ci_high
+pass@1,0.6471,0.4824,0.8
+pass@5,0.8824,0.6566,0.9671
+pass^5,0.2941,0.1328,0.5313
+claimed_success_rate,0.9765,,
+claimed_explicit_rate,0.8471,,
+verified_success_rate,0.6471,,
+false_claim_rate,0.3294,,
+dependable_tasks,5,,
+seconds_per_dependable_task,242.45,,
+tokens_per_dependable_task,136826.8,,

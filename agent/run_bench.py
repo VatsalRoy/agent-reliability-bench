@@ -19,17 +19,30 @@ from eval.checker import load_tasks
 
 
 def run(tasks, make_model, *, k: int, out_path: Path, meta: dict, max_steps: int = 15,
-        seed_base: int = 0, quiet: bool = False) -> list[dict]:
-    """make_model(seed) returns a model_fn. Returns the list of graded records."""
+        seed_base: int = 0, quiet: bool = False, resume: bool = False) -> list[dict]:
+    """make_model(seed) returns a model_fn. Returns the list of graded records.
+
+    resume=True keeps attempts already saved in out_path and runs only the
+    missing ones, so an interrupted long run can pick up where it stopped.
+    """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     err_path = out_path.parent / "errors.jsonl"
     records = []
+    if resume and out_path.exists():
+        records = [json.loads(line) for line in open(out_path) if line.strip()]
+        other = {r.get("prompt_hash") for r in records} - {meta.get("prompt_hash")}
+        if other:
+            raise SystemExit(f"Can't resume: {out_path} was made with a different setup {other}. "
+                             "Use a new --out file.")
+    done = {(r["task_id"], r["attempt"]) for r in records}
     total = len(tasks) * k
-    with open(out_path, "w") as out, open(err_path, "a") as err:
+    with open(out_path, "a" if resume else "w") as out, open(err_path, "a") as err:
         n = 0
         for task in tasks:
             for attempt in range(k):
                 n += 1
+                if (task["id"], attempt) in done:
+                    continue
                 seed = seed_base + attempt
                 rec = run_attempt(task, make_model(seed), max_steps=max_steps)
                 rec.update(meta, attempt=attempt, seed=seed)
@@ -86,6 +99,7 @@ def main():
     p.add_argument("--max-steps", type=int, default=15)
     p.add_argument("--tasks", default="", help="comma-separated task ids (default: all)")
     p.add_argument("--out", default="runs/baseline_k1.jsonl")
+    p.add_argument("--resume", action="store_true", help="skip attempts already saved in --out")
     args = p.parse_args()
 
     tasks = load_tasks()
@@ -111,7 +125,7 @@ def main():
         tasks,
         lambda seed: OllamaModel(args.model, temperature=args.temperature, seed=seed),
         k=args.k, out_path=Path(args.out), meta=meta,
-        max_steps=args.max_steps, seed_base=args.seed_base,
+        max_steps=args.max_steps, seed_base=args.seed_base, resume=args.resume,
     )
     print(summarize(records))
     print(f"\nSaved {len(records)} trajectories to {args.out} in {(time.time() - t0) / 60:.1f} min")
