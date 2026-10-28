@@ -95,7 +95,7 @@ class ShopTools:
         if not scored:
             headings = [s.splitlines()[0].lstrip("# ") for s in sections]
             return {"matches": [], "available_sections": headings}
-        return {"matches": [s for _, s in scored[:3]]}
+        return {"matches": [s for _, s in scored]}
 
     # ---------- tools that change the database ----------
     def create_ticket(self, order_id, notes) -> dict:

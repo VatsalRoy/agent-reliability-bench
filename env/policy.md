@@ -19,7 +19,7 @@ Any refund greater than $500 requires manager approval. Do NOT issue the refund 
 Only orders with status "processing" can be cancelled. Shipped or delivered orders cannot be cancelled.
 
 ## Tickets
-If an open ticket already exists for an order, update that ticket instead of creating a new one. Mark a ticket "solved" only when the customer's issue is fully resolved.
+If an order already has an open ticket, do not create a new ticket for it. When you resolve that order's issue (for example by issuing a refund or cancelling the order), set the existing ticket's status to "solved".
 
 ## Replies
 Always finish by sending exactly one reply to the customer that explains what was done.

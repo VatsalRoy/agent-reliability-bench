@@ -106,3 +106,26 @@ def test_private_methods_not_callable(tools):
 def test_every_schema_has_a_tool(tools):
     for s in TOOL_SCHEMAS:
         assert callable(getattr(tools, s["function"]["name"]))
+
+
+
+# ----- regression tests for the Phase 4 fixes (see CHANGELOG) -----
+def _headings(result):
+    return [m.splitlines()[0] for m in result["matches"]]
+
+
+def test_refund_search_shows_manager_approval_rule(tools):
+    """Baseline v1 bug: this rule was cut off by a top-3 limit."""
+    r = tools.call("search_policy", {"query": "damaged product refund"})
+    assert "## Large refunds (manager approval)" in _headings(r)
+
+
+def test_refund_search_shows_tickets_rule(tools):
+    r = tools.call("search_policy", {"query": "late delivery refund"})
+    assert "## Tickets" in _headings(r)
+    assert _headings(r)[0] == "## Late delivery compensation"
+
+
+def test_cancel_search_shows_tickets_rule(tools):
+    r = tools.call("search_policy", {"query": "cancel order"})
+    assert "## Tickets" in _headings(r) and "## Cancellations" in _headings(r)
