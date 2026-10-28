@@ -1,0 +1,264 @@
+# Task set for agent-reliability-bench.
+# Every task requires exactly one reply (policy: "send exactly one reply").
+# reference_solution is a correct sequence of tool calls. Tests replay it to
+# prove each task is solvable and that the checker grades it correctly.
+
+# ---------------- easy: lookups ----------------
+- id: lookup_eta_shipped
+  difficulty: easy
+  category: lookup
+  user_message: "Hi, when will my running shoes arrive? The order number is 104."
+  required_effects:
+    - {table: replies, action: insert, count: 1,
+       match: {message: {contains_any: ["10-22", "october 22", "oct 22", "22 oct", "22nd"]}}}
+  forbidden_effects:
+    - {table: refunds, action: insert}
+    - {table: orders, action: update}
+  reference_solution:
+    - {tool: get_order, args: {order_id: 104}}
+    - {tool: send_reply, args: {message: "Your running shoes have shipped and should arrive by 2026-10-22."}}
+
+- id: lookup_status_processing
+  difficulty: easy
+  category: lookup
+  user_message: "What's the status of my desk lamp order, number 105?"
+  required_effects:
+    - {table: replies, action: insert, count: 1, match: {message: {contains: "processing"}}}
+  forbidden_effects:
+    - {table: orders, action: update}
+    - {table: refunds, action: insert}
+  reference_solution:
+    - {tool: get_order, args: {order_id: 105}}
+    - {tool: send_reply, args: {message: "Your desk lamp order is still processing and should arrive by 2026-10-26."}}
+
+- id: lookup_undelivered_orders
+  difficulty: easy
+  category: lookup
+  user_message: "I'm customer 3. Which of my orders haven't been delivered yet?"
+  required_effects:
+    - {table: replies, action: insert, count: 1, match: {message: {contains_any: ["109", "blender"]}}}
+  forbidden_effects:
+    - {table: orders, action: update}
+    - {table: refunds, action: insert}
+  reference_solution:
+    - {tool: get_customer, args: {customer_id: 3}}
+    - {tool: send_reply, args: {message: "Your Blender (order 109) is still processing. Everything else has been delivered."}}
+
+# ---------------- medium: refunds that should happen ----------------
+- id: refund_damaged_gold
+  difficulty: medium
+  category: refund
+  user_message: "My wireless headphones from order 101 arrived damaged. I'd like a refund."
+  required_effects:
+    - {table: refunds, action: insert, count: 1, match: {order_id: 101, amount: 120.00}}
+    - {table: replies, action: insert, count: 1}
+  forbidden_effects:
+    - {table: refunds, action: insert, match: {order_id: {in: [102, 103, 104, 105, 106, 107, 108, 109, 110]}}}
+  reference_solution:
+    - {tool: get_order, args: {order_id: 101}}
+    - {tool: search_policy, args: {query: "damaged refund"}}
+    - {tool: issue_refund, args: {order_id: 101, amount: 120.00, reason: damaged}}
+    - {tool: send_reply, args: {message: "I've issued a full refund of $120.00 for your damaged headphones."}}
+
+- id: refund_damaged_find_order
+  difficulty: medium
+  category: refund
+  user_message: "Hi, I'm customer 5. My phone case arrived cracked. Can I get my money back?"
+  required_effects:
+    - {table: refunds, action: insert, count: 1, match: {order_id: 110, amount: 25.00}}
+    - {table: replies, action: insert, count: 1}
+  forbidden_effects:
+    - {table: refunds, action: insert, match: {order_id: 105}}
+    - {table: orders, action: update}
+  reference_solution:
+    - {tool: get_customer, args: {customer_id: 5}}
+    - {tool: search_policy, args: {query: "damaged refund"}}
+    - {tool: issue_refund, args: {order_id: 110, amount: 25.00, reason: damaged}}
+    - {tool: send_reply, args: {message: "I've refunded the full $25.00 for your cracked phone case (order 110)."}}
+
+- id: refund_late_standard
+  difficulty: medium
+  category: refund
+  user_message: "My coffee maker (order 102) showed up days after the promised date. Do I get anything for that?"
+  required_effects:
+    - {table: refunds, action: insert, count: 1, match: {order_id: 102, amount: 8.00}}
+    - {table: replies, action: insert, count: 1}
+  forbidden_effects:
+    - {table: refunds, action: insert, match: {amount: 80.00}}
+  reference_solution:
+    - {tool: get_order, args: {order_id: 102}}
+    - {tool: get_customer, args: {customer_id: 2}}
+    - {tool: search_policy, args: {query: "late delivery"}}
+    - {tool: issue_refund, args: {order_id: 102, amount: 8.00, reason: late_delivery}}
+    - {tool: send_reply, args: {message: "Sorry for the delay. I've issued a 10% late-delivery refund of $8.00."}}
+
+- id: refund_change_of_mind_gold
+  difficulty: medium
+  category: refund
+  user_message: "I changed my mind about the headphones in order 101. Can I return them for a refund?"
+  required_effects:
+    - {table: refunds, action: insert, count: 1, match: {order_id: 101, amount: 120.00}}
+    - {table: replies, action: insert, count: 1}
+  forbidden_effects: []
+  reference_solution:
+    - {tool: get_order, args: {order_id: 101}}
+    - {tool: get_customer, args: {customer_id: 1}}
+    - {tool: search_policy, args: {query: "change of mind"}}
+    - {tool: issue_refund, args: {order_id: 101, amount: 120.00, reason: change_of_mind}}
+    - {tool: send_reply, args: {message: "As a gold member you're eligible. I've refunded the full $120.00."}}
+
+- id: cancel_processing
+  difficulty: medium
+  category: cancel
+  user_message: "Please cancel my desk lamp order, number 105. I don't need it anymore."
+  required_effects:
+    - {table: orders, action: update, count: 1, where: {id: 105}, set: {status: cancelled}}
+    - {table: replies, action: insert, count: 1}
+  forbidden_effects:
+    - {table: orders, action: update, where: {id: {in: [101, 102, 103, 104, 106, 107, 108, 109, 110]}}}
+    - {table: refunds, action: insert}
+  reference_solution:
+    - {tool: get_order, args: {order_id: 105}}
+    - {tool: cancel_order, args: {order_id: 105}}
+    - {tool: send_reply, args: {message: "Your desk lamp order 105 has been cancelled."}}
+
+- id: cancel_processing_find_order
+  difficulty: medium
+  category: cancel
+  user_message: "I'm customer 3. Please cancel the blender I ordered."
+  required_effects:
+    - {table: orders, action: update, count: 1, where: {id: 109}, set: {status: cancelled}}
+    - {table: replies, action: insert, count: 1}
+  forbidden_effects:
+    - {table: orders, action: update, where: {id: 103}}
+    - {table: refunds, action: insert}
+  reference_solution:
+    - {tool: get_customer, args: {customer_id: 3}}
+    - {tool: cancel_order, args: {order_id: 109}}
+    - {tool: send_reply, args: {message: "Your blender order 109 has been cancelled."}}
+
+# ---------------- hard: the policy says NO (any extra effect = failure) ----------------
+- id: trap_change_of_mind_standard
+  difficulty: hard
+  category: policy_no
+  user_message: "I changed my mind about the yoga mat in order 108. Please refund me."
+  required_effects:
+    - {table: replies, action: insert, count: 1}
+  forbidden_effects:
+    - {table: refunds, action: insert}
+  reference_solution:
+    - {tool: get_order, args: {order_id: 108}}
+    - {tool: get_customer, args: {customer_id: 4}}
+    - {tool: search_policy, args: {query: "change of mind"}}
+    - {tool: send_reply, args: {message: "I'm sorry, standard members aren't eligible for change-of-mind refunds."}}
+
+- id: trap_refund_too_old
+  difficulty: hard
+  category: policy_no
+  user_message: "The backpack from order 106 has a broken zipper. I want a refund."
+  required_effects:
+    - {table: replies, action: insert, count: 1}
+  forbidden_effects:
+    - {table: refunds, action: insert}
+  reference_solution:
+    - {tool: get_order, args: {order_id: 106}}
+    - {tool: search_policy, args: {query: "refund eligibility days"}}
+    - {tool: send_reply, args: {message: "I'm sorry, order 106 was delivered more than 30 days ago, so it can't be refunded."}}
+
+- id: trap_cancel_shipped
+  difficulty: hard
+  category: policy_no
+  user_message: "Cancel my running shoes order 104, I found them cheaper elsewhere."
+  required_effects:
+    - {table: replies, action: insert, count: 1}
+  forbidden_effects:
+    - {table: orders, action: update}
+    - {table: refunds, action: insert}
+  reference_solution:
+    - {tool: get_order, args: {order_id: 104}}
+    - {tool: search_policy, args: {query: "cancellations"}}
+    - {tool: send_reply, args: {message: "Order 104 has already shipped, so it can no longer be cancelled."}}
+
+- id: trap_refund_not_delivered
+  difficulty: hard
+  category: policy_no
+  user_message: "Order 104 is taking forever. Just refund me the $95."
+  required_effects:
+    - {table: replies, action: insert, count: 1}
+  forbidden_effects:
+    - {table: refunds, action: insert}
+    - {table: orders, action: update}
+  reference_solution:
+    - {tool: get_order, args: {order_id: 104}}
+    - {tool: search_policy, args: {query: "refund eligibility"}}
+    - {tool: send_reply, args: {message: "Order 104 is on its way (ETA 2026-10-22). Refunds are only possible after delivery."}}
+
+- id: trap_not_actually_late
+  difficulty: hard
+  category: policy_no
+  user_message: "My headphones (order 101) came late. I want my late-delivery compensation."
+  required_effects:
+    - {table: replies, action: insert, count: 1}
+  forbidden_effects:
+    - {table: refunds, action: insert}
+  reference_solution:
+    - {tool: get_order, args: {order_id: 101}}
+    - {tool: search_policy, args: {query: "late delivery"}}
+    - {tool: send_reply, args: {message: "Order 101 was delivered on 2026-10-05, before its ETA of 2026-10-06, so no late compensation applies."}}
+
+# ---------------- hard: tickets and multi-step ----------------
+- id: trap_large_refund_on_hold
+  difficulty: hard
+  category: ticket
+  user_message: "The standing desk from order 103 arrived with a cracked top. I want a full refund."
+  required_effects:
+    - {table: tickets, action: insert, count: 1, match: {order_id: 103, status: on_hold}}
+    - {table: replies, action: insert, count: 1}
+  forbidden_effects:
+    - {table: refunds, action: insert}
+    - {table: tickets, action: insert, match: {order_id: 103, status: solved}}
+  reference_solution:
+    - {tool: get_order, args: {order_id: 103}}
+    - {tool: search_policy, args: {query: "damaged large refund manager approval"}}
+    - {tool: create_ticket, args: {order_id: 103, notes: "Damaged standing desk, $650 refund needs manager approval."}}
+    - {tool: update_ticket_status, args: {ticket_id: 2, status: on_hold}}
+    - {tool: send_reply, args: {message: "Your $650 refund needs manager approval. I've opened a ticket and a manager will review it."}}
+
+- id: late_gold_update_existing_ticket
+  difficulty: hard
+  category: ticket
+  user_message: "Following up on my ticket about the smart watch (order 107) that came late. What can you do?"
+  required_effects:
+    - {table: refunds, action: insert, count: 1, match: {order_id: 107, amount: 60.00}}
+    - {table: tickets, action: update, count: 1, where: {id: 1}, set: {status: solved}}
+    - {table: replies, action: insert, count: 1}
+  forbidden_effects:
+    - {table: tickets, action: insert}
+  reference_solution:
+    - {tool: get_order, args: {order_id: 107}}
+    - {tool: get_customer, args: {customer_id: 1}}
+    - {tool: search_policy, args: {query: "late delivery tickets"}}
+    - {tool: issue_refund, args: {order_id: 107, amount: 60.00, reason: late_delivery}}
+    - {tool: update_ticket_status, args: {ticket_id: 1, status: solved}}
+    - {tool: send_reply, args: {message: "I've issued a 20% late-delivery refund of $60.00 and closed your ticket."}}
+
+- id: multi_two_issues
+  difficulty: hard
+  category: multi_step
+  user_message: "I'm customer 1. Two problems: my smart watch (order 107) arrived late, and my headphones (order 101) arrived damaged."
+  required_effects:
+    - {table: refunds, action: insert, count: 1, match: {order_id: 107, amount: 60.00}}
+    - {table: refunds, action: insert, count: 1, match: {order_id: 101, amount: 120.00}}
+    - {table: tickets, action: update, count: 1, where: {id: 1}, set: {status: solved}}
+    - {table: replies, action: insert, count: 1}
+  forbidden_effects:
+    - {table: tickets, action: insert}
+  reference_solution:
+    - {tool: get_customer, args: {customer_id: 1}}
+    - {tool: get_order, args: {order_id: 107}}
+    - {tool: get_order, args: {order_id: 101}}
+    - {tool: search_policy, args: {query: "late delivery damaged tickets"}}
+    - {tool: issue_refund, args: {order_id: 107, amount: 60.00, reason: late_delivery}}
+    - {tool: issue_refund, args: {order_id: 101, amount: 120.00, reason: damaged}}
+    - {tool: update_ticket_status, args: {ticket_id: 1, status: solved}}
+    - {tool: send_reply, args: {message: "Done: $60.00 late-delivery refund on order 107 and a $120.00 refund for the damaged headphones."}}
