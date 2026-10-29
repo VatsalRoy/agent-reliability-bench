@@ -17,6 +17,7 @@ import tempfile
 import time
 from pathlib import Path
 
+from agent.variants import BASE, Variant
 from env.db import TODAY, connect, fresh_copy, snapshot
 from env.tools import TOOL_SCHEMAS, ShopTools
 from eval.checker import check
@@ -33,12 +34,13 @@ def system_prompt() -> str:
 ENV_DIR = Path(__file__).resolve().parent.parent / "env"
 
 
-def prompt_hash(tools: list[dict] = TOOL_SCHEMAS) -> str:
+def prompt_hash(tools: list[dict] = TOOL_SCHEMAS, extra: str = "") -> str:
     """Fingerprint of the whole setup besides the task: the prompt, the tool
     schemas, the policy, and the tool code. If any of them change, the hash
-    changes, so results from different setups never get mixed up by accident."""
+    changes, so results from different setups never get mixed up by accident.
+    `extra` adds a probe variant's settings (empty for the normal setup)."""
     blob = (PROMPT_PATH.read_text() + json.dumps(tools, sort_keys=True)
-            + (ENV_DIR / "policy.md").read_text() + (ENV_DIR / "tools.py").read_text())
+            + (ENV_DIR / "policy.md").read_text() + (ENV_DIR / "tools.py").read_text() + extra)
     return hashlib.sha256(blob.encode()).hexdigest()[:12]
 
 
@@ -81,20 +83,19 @@ def parse_response(resp) -> dict:
 
 
 # ---------- one attempt ----------
-def run_attempt(task: dict, model_fn, *, max_steps: int = 15, tools_schema: list[dict] = TOOL_SCHEMAS,
-                tool_name_map: dict[str, str] | None = None) -> dict:
+def run_attempt(task: dict, model_fn, *, max_steps: int = 15, variant: Variant = BASE) -> dict:
     """Run one task once, on a fresh copy of the shop, and grade it.
 
-    tool_name_map maps the names the model sees to the real tool names.
-    It's unused for now and exists for the renaming experiment in Phase 6.
+    `variant` controls only what the agent is shown (tool names, result
+    format). The real tools and the checker never change.
     """
     workdir = Path(tempfile.mkdtemp(prefix="arb_"))
     conn = connect(fresh_copy(workdir))
     tools = ShopTools(conn)
-    name_map = tool_name_map or {}
+    tools_schema = variant.schemas()
 
     messages = [
-        {"role": "system", "content": system_prompt()},
+        {"role": "system", "content": variant.rename_text(system_prompt())},
         {"role": "user", "content": task["user_message"]},
     ]
     tool_log, prompt_tokens, completion_tokens = [], 0, 0
@@ -121,12 +122,15 @@ def run_attempt(task: dict, model_fn, *, max_steps: int = 15, tools_schema: list
                 break
 
             for c in out["tool_calls"]:
-                real_name = name_map.get(c["name"], c["name"])
-                result = tools.call(real_name, c["arguments"])
+                real_name = variant.real_name(c["name"])
+                if real_name is None:
+                    result = {"error": f"Unknown tool '{c['name']}'"}
+                else:
+                    result = tools.call(real_name, c["arguments"])
                 tool_log.append({"step": n_steps, "name": c["name"], "real_name": real_name,
                                  "args": c["arguments"], "result": result})
                 messages.append({"role": "tool", "tool_name": c["name"],
-                                 "content": json.dumps(result, default=str)})
+                                 "content": variant.format_result(result)})
     except Exception as e:  # the model server crashed / timed out: not the agent's fault
         finish, error = "infra_error", f"{type(e).__name__}: {e}"
 

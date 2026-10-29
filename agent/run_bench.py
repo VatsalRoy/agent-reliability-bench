@@ -15,11 +15,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from agent.react_agent import OllamaModel, prompt_hash, run_attempt
+from agent.variants import BASE, VARIANTS
 from eval.checker import load_tasks
 
 
 def run(tasks, make_model, *, k: int, out_path: Path, meta: dict, max_steps: int = 15,
-        seed_base: int = 0, quiet: bool = False, resume: bool = False) -> list[dict]:
+        seed_base: int = 0, quiet: bool = False, resume: bool = False, variant=BASE) -> list[dict]:
     """make_model(seed) returns a model_fn. Returns the list of graded records.
 
     resume=True keeps attempts already saved in out_path and runs only the
@@ -44,7 +45,7 @@ def run(tasks, make_model, *, k: int, out_path: Path, meta: dict, max_steps: int
                 if (task["id"], attempt) in done:
                     continue
                 seed = seed_base + attempt
-                rec = run_attempt(task, make_model(seed), max_steps=max_steps)
+                rec = run_attempt(task, make_model(seed), max_steps=max_steps, variant=variant)
                 rec.update(meta, attempt=attempt, seed=seed)
                 line = json.dumps(rec, default=str)
                 if rec["finish_reason"] == "infra_error":
@@ -100,6 +101,8 @@ def main():
     p.add_argument("--tasks", default="", help="comma-separated task ids (default: all)")
     p.add_argument("--out", default="runs/baseline_k1.jsonl")
     p.add_argument("--resume", action="store_true", help="skip attempts already saved in --out")
+    p.add_argument("--variant", default="none", choices=sorted(VARIANTS),
+                   help="probe: change what the agent is shown (see agent/variants.py)")
     args = p.parse_args()
 
     tasks = load_tasks()
@@ -110,22 +113,26 @@ def main():
         if missing:
             raise SystemExit(f"Unknown task ids: {sorted(missing)}")
 
+    variant = VARIANTS[args.variant]
     meta = {
         "run_id": datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
         "model": args.model,
         "temperature": args.temperature,
         "max_steps": args.max_steps,
-        "prompt_hash": prompt_hash(),
+        "variant": args.variant,
+        "seed_base": args.seed_base,
+        "prompt_hash": prompt_hash(variant.schemas(), variant.fingerprint()),
         "platform": platform.platform(),
     }
-    print(f"Model {args.model} | {len(tasks)} tasks x k={args.k} | prompt {meta['prompt_hash']}\n")
+    print(f"Model {args.model} | {len(tasks)} tasks x k={args.k} | variant {args.variant} | "
+          f"seeds {args.seed_base}-{args.seed_base + args.k - 1} | setup {meta['prompt_hash']}\n")
 
     t0 = time.time()
     records = run(
         tasks,
         lambda seed: OllamaModel(args.model, temperature=args.temperature, seed=seed),
         k=args.k, out_path=Path(args.out), meta=meta,
-        max_steps=args.max_steps, seed_base=args.seed_base, resume=args.resume,
+        max_steps=args.max_steps, seed_base=args.seed_base, resume=args.resume, variant=variant,
     )
     print(summarize(records))
     print(f"\nSaved {len(records)} trajectories to {args.out} in {(time.time() - t0) / 60:.1f} min")

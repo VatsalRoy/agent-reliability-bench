@@ -1,0 +1,9 @@
+probe,grader,pairs,base_pass1,probe_pass1,delta,ci_low,ci_high,flip_rate,effect
+control,state,85,0.6471,0.6824,0.0353,-0.0706,0.1412,0.2706,False
+control,name,85,0.6471,0.6471,-0.0,-0.1059,0.1059,0.2824,False
+rename,state,85,0.6471,0.6588,0.0118,-0.1176,0.1294,0.2941,False
+rename,name,85,0.6471,0.0,-0.6471,-0.8,-0.4824,0.6471,True
+reformat,state,85,0.6471,0.6588,0.0118,-0.1059,0.1412,0.2706,False
+reformat,name,85,0.6471,0.6353,-0.0118,-0.1294,0.1059,0.2706,False
+misleading,state,85,0.6471,0.3647,-0.2824,-0.4706,-0.1059,0.5176,True
+misleading,name,85,0.6471,0.0,-0.6471,-0.8,-0.4824,0.6471,True

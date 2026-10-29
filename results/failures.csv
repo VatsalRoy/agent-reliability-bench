@@ -1,0 +1,9 @@
+signature,family,count,share
+step_limit,tool_use,0,0.0
+no_state_change,tool_use,15,0.5
+policy_violation,decision,10,0.3333
+tool_error_unrecovered,tool_use,0,0.0
+duplicate_effect,tool_use,0,0.0
+wrong_value,decision,4,0.1333
+no_reply_sent,tool_use,0,0.0
+missing_effect,tool_use,1,0.0333

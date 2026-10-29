@@ -1,0 +1,13 @@
+metric,value
+judge_model,gemma4:e4b
+n,85
+tp,43
+tn,10
+fp,20
+fn,12
+accuracy,0.6235
+kappa,0.1226
+judge_pass_rate,0.7412
+db_pass_rate,0.6471
+judge_passed_db_wrong,0.6667
+wrong_among_judge_passes,0.3175
