@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Agent Said Done</title>
+<meta name="description" content="Every attempt of a tool-using LLM agent, with what it told the customer next to what the database recorded.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Public+Sans:ital,wght@0,400;0,600;0,800;1,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #eef1f5;
+  --surface: #ffffff;
+  --sunk: #e3e8ee;
+  --ink: #17202c;
+  --ink-2: #4c5768;
+  --rule: #cdd5df;
+  --pass: #1d7a55;
+  --pass-bg: #dcf1e7;
+  --fail: #b3262e;
+  --fail-bg: #fbe3e4;
+  --accent: #2f45c4;
+  --focus: #2f45c4;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #11151b;
+    --surface: #19202a;
+    --sunk: #0d1116;
+    --ink: #e7ebf1;
+    --ink-2: #a3adbb;
+    --rule: #2e3846;
+    --pass: #5ccf98;
+    --pass-bg: #163528;
+    --fail: #f2777b;
+    --fail-bg: #3d1c20;
+    --accent: #93a0ff;
+    --focus: #93a0ff;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 1rem/1.55 "Public Sans", system-ui, sans-serif;
+}
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.86em; }
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* ---------- opening ---------- */
+.hero { padding: 56px 0 40px; }
+.hero h1 {
+  font-weight: 800;
+  font-size: clamp(2.4rem, 7vw, 4.6rem);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  margin: 0 0 20px;
+}
+.lede { font-size: clamp(1.05rem, 2.2vw, 1.3rem); max-width: 40em; margin: 0 0 36px; color: var(--ink-2); }
+.lede b { color: var(--ink); font-weight: 800; }
+.receipt {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.receipt > div { padding: 22px 24px 24px; }
+.receipt .said { border-right: 1px dashed var(--rule); }
+.receipt h2 { font-size: 0.95rem; font-weight: 600; color: var(--ink-2); margin: 0 0 12px; }
+.receipt blockquote { margin: 0 0 14px; font-size: 1.12rem; line-height: 1.5; }
+.receipt .tag { display: inline-block; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
+.tag.ok { color: var(--pass); background: var(--pass-bg); }
+.tag.bad { color: var(--fail); background: var(--fail-bg); }
+.receipt .row { font-size: 1.02rem; padding: 10px 12px; border-left: 4px solid var(--fail); background: var(--fail-bg); margin-bottom: 12px; border-radius: 0 4px 4px 0; }
+.receipt .ask { grid-column: 1 / -1; border-top: 1px solid var(--rule); background: var(--sunk); padding: 14px 24px; color: var(--ink-2); font-size: 0.95rem; }
+
+/* ---------- sections ---------- */
+section { padding: 40px 0; border-top: 1px solid var(--rule); }
+section > .wrap > h2 { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 8px; }
+.intro { color: var(--ink-2); max-width: 46em; margin: 0 0 20px; }
+
+/* ---------- run switch ---------- */
+.switch { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+.switch button {
+  font: inherit; font-size: 0.92rem; cursor: pointer;
+  border: 1px solid var(--rule); background: var(--surface); color: var(--ink);
+  padding: 7px 12px; border-radius: 999px;
+}
+.switch button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.runstats { color: var(--ink-2); font-size: 0.95rem; margin: 0 0 18px; }
+.runstats b { color: var(--ink); }
+
+/* ---------- legend + grid ---------- */
+.legend { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 0 0 14px; font-size: 0.9rem; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+.trow {
+  display: grid;
+  grid-template-columns: minmax(0, 19rem) auto 3.2em;
+  justify-content: start;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+.trow.current { background: var(--surface); }
+.tname { font-weight: 600; overflow-wrap: anywhere; }
+.tname small { display: block; font-weight: 400; color: var(--ink-2); font-size: 0.82rem; }
+.cells { display: flex; gap: 6px; }
+.count { text-align: right; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.cell {
+  width: 34px; height: 34px; border-radius: 5px; cursor: pointer;
+  display: grid; place-items: center;
+  font: 800 1rem/1 "Public Sans", sans-serif;
+  border: 2px solid transparent; padding: 0;
+}
+.cell.pass { background: var(--pass); color: var(--surface); }
+.cell.lie { background: var(--fail); color: var(--surface); }
+.cell.honest { background: transparent; border-color: var(--fail); color: var(--fail); }
+.cell[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--ink); }
+.legend .cell { width: 22px; height: 22px; font-size: 0.75rem; cursor: default; }
+
+/* ---------- attempt detail ---------- */
+.detail {
+  margin-top: 26px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+}
+.dhead { padding: 20px 24px; border-bottom: 1px solid var(--rule); }
+.dhead h3 { margin: 0 0 6px; font-size: 1.3rem; }
+.dhead .msg { margin: 8px 0 0; font-size: 1.05rem; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.pills .tag { font-size: 0.88rem; }
+.tag.plain { color: var(--ink-2); background: var(--sunk); }
+.dbody { display: grid; grid-template-columns: 1.15fr 1fr; }
+.dbody > div { padding: 20px 24px 24px; min-width: 0; }
+.dbody > div + div { border-left: 1px solid var(--rule); background: var(--sunk); }
+.dbody h4 { margin: 0 0 12px; font-size: 1rem; }
+.dbody h4:not(:first-child) { margin-top: 22px; }
+.ev { margin: 0 0 12px; }
+.ev.customer { padding: 10px 12px; background: var(--sunk); border-radius: 6px; }
+.ev .who { font-size: 0.82rem; color: var(--ink-2); font-weight: 600; display: block; margin-bottom: 2px; }
+.ev.agent p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.call { border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.call .sig { padding: 8px 10px; overflow-wrap: anywhere; }
+.call .sig .name { font-weight: 600; }
+.call.err { border-color: var(--fail); }
+.call details { border-top: 1px dashed var(--rule); }
+.call summary { cursor: pointer; padding: 6px 10px; font-size: 0.85rem; color: var(--ink-2); }
+.call pre { margin: 0; padding: 8px 10px 10px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.8rem; color: var(--ink-2); }
+.change { padding: 8px 10px; border-left: 4px solid var(--rule); background: var(--surface); margin-bottom: 8px; border-radius: 0 4px 4px 0; overflow-wrap: anywhere; }
+.change.required { border-left-color: var(--pass); }
+.change.forbidden { border-left-color: var(--fail); }
+.change .why { display: block; font-size: 0.8rem; color: var(--ink-2); margin-top: 2px; }
+.change.forbidden .why { color: var(--fail); font-weight: 600; }
+.missing { padding: 8px 10px; border: 1px dashed var(--fail); border-radius: 4px; margin-bottom: 8px; overflow-wrap: anywhere; }
+.none { color: var(--ink-2); font-style: italic; margin: 0 0 8px; }
+ul.spec { margin: 0; padding-left: 1.1em; }
+ul.spec li { margin-bottom: 4px; overflow-wrap: anywhere; }
+.judge { padding: 10px 12px; background: var(--surface); border-radius: 4px; margin-bottom: 8px; }
+.judge p { margin: 4px 0 0; font-size: 0.92rem; color: var(--ink-2); }
+.facts { font-size: 0.9rem; color: var(--ink-2); margin: 18px 0 0; }
+
+/* ---------- tables ---------- */
+.tables { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.tables h3 { margin: 0 0 6px; font-size: 1.15rem; }
+.tables p { color: var(--ink-2); margin: 0 0 12px; font-size: 0.95rem; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-weight: 600; color: var(--ink-2); }
+td.num, th.num { text-align: right; }
+td .tag { font-size: 0.82rem; white-space: nowrap; }
+
+footer { padding: 28px 0 48px; border-top: 1px solid var(--rule); color: var(--ink-2); font-size: 0.95rem; }
+footer p { margin: 0 0 6px; }
+
+@media (max-width: 760px) {
+  .hero { padding: 36px 0 28px; }
+  .receipt, .dbody, .tables { grid-template-columns: 1fr; }
+  .receipt .said { border-right: 0; border-bottom: 1px dashed var(--rule); }
+  .dbody > div + div { border-left: 0; border-top: 1px solid var(--rule); }
+  .trow { grid-template-columns: 1fr auto; }
+  .trow .cells { grid-column: 1 / -1; grid-row: 2; }
+  .cell { width: 40px; height: 40px; }
+  .receipt > div, .dhead, .dbody > div { padding-left: 16px; padding-right: 16px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .detail.flash { animation: flash 0.5s ease-out; }
+  @keyframes flash { from { box-shadow: 0 0 0 4px var(--accent); } to { box-shadow: 0 0 0 0 transparent; } }
+}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <h1>The agent said done.</h1>
+    <p class="lede" id="lede"></p>
+    <div class="receipt" id="receipt" hidden>
+      <div class="said">
+        <h2>What the agent told the customer</h2>
+        <blockquote id="rx-reply"></blockquote>
+        <span class="tag ok" id="rx-outcome"></span>
+      </div>
+      <div class="did">
+        <h2>What the database recorded</h2>
+        <div id="rx-rows"></div>
+        <span class="tag bad">Forbidden by the shop's policy</span>
+      </div>
+      <div class="ask" id="rx-ask"></div>
+    </div>
+  </div>
+</header>
+
+<section id="explore" aria-labelledby="explore-h">
+  <div class="wrap">
+    <h2 id="explore-h">Every attempt</h2>
+    <p class="intro">Each square is one attempt on a fresh copy of the database. Select one to read the conversation next to what actually changed.</p>
+    <div class="switch" id="switch" role="group" aria-label="Choose a run"></div>
+    <p class="runstats" id="runstats"></p>
+    <div class="legend" aria-hidden="true">
+      <span><span class="cell pass">✓</span>Database confirms success</span>
+      <span><span class="cell lie">✕</span>Failed, but the agent said it succeeded</span>
+      <span><span class="cell honest">✕</span>Failed, and the agent said so</span>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div class="detail" id="detail" tabindex="-1" aria-live="polite"></div>
+  </div>
+</section>
+
+<section id="graders" aria-labelledby="graders-h">
+  <div class="wrap">
+    <h2 id="graders-h">Checking the checkers</h2>
+    <p class="intro">The database is the ground truth. These tables show how two cheaper ways of grading compare with it.</p>
+    <div class="tables">
+      <div id="judge-box"></div>
+      <div id="probe-box"></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Code, method, and limitations: <a href="https://github.com/VatsalRoy/agent-reliability-bench">github.com/VatsalRoy/agent-reliability-bench</a></p>
+    <p id="foot-model"></p>
+  </div>
+</footer>
+
+<noscript><p class="wrap">This page needs JavaScript to show the results.</p></noscript>
+<script src="data.js"></script>
+<script>
+(function () {
+  const D = window.BENCH;
+  if (!D) { document.getElementById("lede").textContent = "No results found. Run python -m app.build_site first."; return; }
+
+  // ---------- helpers ----------
+  const $ = (id) => document.getElementById(id);
+  function el(tag, attrs, ...kids) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") n.className = v;
+      else if (k === "on") for (const [ev, fn] of Object.entries(v)) n.addEventListener(ev, fn);
+      else n.setAttribute(k, v === true ? "" : v);
+    }
+    for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) n.append(k.nodeType ? k : String(k));
+    return n;
+  }
+  const pct = (x) => Math.round(x * 100) + "%";
+  const pts = (x) => (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(Math.round(x * 100));
+  const human = (id) => { const s = id.replace(/_/g, " "); return s.charAt(0).toUpperCase() + s.slice(1); };
+  const tasks = Object.fromEntries(D.tasks.map((t) => [t.id, t]));
+  const S = D.summary, K = D.k;
+
+  // ---------- opening ----------
+  $("lede").append(
+    "A small local model (", el("code", {}, S.model), ") handled ", String(S.tasks), " customer-support tasks, ",
+    String(K), " times each. It said it succeeded on ", el("b", {}, pct(S.claimed_rate)),
+    " of attempts. The database confirmed ", el("b", {}, pct(S.verified_rate)),
+    ", and only ", el("b", {}, pct(S["pass^k"])), " of tasks succeeded all ", String(K), " times."
+  );
+  if (D.example) {
+    const ex = D.example;
+    $("rx-reply").textContent = "“" + ex.reply + "”";
+    $("rx-outcome").textContent = ex.outcome === "SUCCESS" ? "Then reported: OUTCOME: SUCCESS" : "Then stopped, as if done";
+    ex.forbidden.forEach((f) => $("rx-rows").append(el("div", { class: "row mono" }, f)));
+    $("rx-ask").append("The customer asked: “" + tasks[ex.task_id].message + "” ",
+      el("a", { href: "#main/" + ex.task_id + "/" + ex.attempt }, "Open this attempt"));
+    $("receipt").hidden = false;
+  }
+  $("foot-model").textContent = "Agent: " + S.model + ". Temperature 0.7, seeds 0–" + (K - 1) +
+    ". Every attempt ran on a fresh copy of the database.";
+
+  // ---------- state ----------
+  const runs = Object.fromEntries(D.runs.map((r) => [r.key, r]));
+  const state = { run: "main", task: D.example ? D.example.task_id : D.tasks[0].id, attempt: D.example ? D.example.attempt : 0 };
+  function fromHash() {
+    const [run, task, att] = decodeURIComponent(location.hash.slice(1)).split("/");
+    if (runs[run] && tasks[task]) { state.run = run; state.task = task; state.attempt = Number(att) || 0; return true; }
+    return false;
+  }
+  fromHash();
+
+  function kind(a) { return a.pass ? "pass" : a.claimed ? "lie" : "honest"; }
+  function label(a) {
+    return a.pass ? "Passed" : a.claimed ? "Failed, agent said it succeeded" : "Failed, agent said it failed";
+  }
+
+  // ---------- run switch ----------
+  function renderSwitch() {
+    const box = $("switch"); box.replaceChildren();
+    D.runs.forEach((r) => box.append(el("button", {
+      type: "button", "aria-pressed": r.key === state.run ? "true" : "false",
+      on: { click: () => { state.run = r.key; renderAll(); } } }, r.label)));
+    const s = runs[state.run].summary;
+    $("runstats").replaceChildren(
+      "pass@1 ", el("b", {}, pct(s["pass@1"])), ", pass^" + K + " ", el("b", {}, pct(s["pass^k"])),
+      ", agent claimed success on ", el("b", {}, pct(s.claimed_rate)), " of attempts, and ",
+      el("b", {}, pct(s.false_claims_among_claims)), " of those claims were false."
+    );
+  }
+
+  // ---------- grid ----------
+  function renderGrid() {
+    const grid = $("grid"); grid.replaceChildren();
+    const run = runs[state.run];
+    D.tasks.forEach((t) => {
+      const atts = run.attempts[t.id] || [];
+      const passed = atts.filter((a) => a.pass).length;
+      const row = el("div", { class: "trow" + (t.id === state.task ? " current" : "") },
+        el("div", { class: "tname" }, human(t.id), el("small", {}, t.difficulty + ", " + t.category.replace(/_/g, " "))),
+        el("div", { class: "cells" }, atts.map((a) => el("button", {
+          type: "button", class: "cell " + kind(a),
+          "aria-pressed": t.id === state.task && a.attempt === state.attempt ? "true" : "false",
+          "aria-label": human(t.id) + ", attempt " + (a.attempt + 1) + ": " + label(a),
+          title: "Attempt " + (a.attempt + 1) + ": " + label(a),
+          on: { click: () => select(t.id, a.attempt) } }, a.pass ? "✓" : "✕"))),
+        el("div", { class: "count" }, passed + "/" + atts.length));
+      grid.append(row);
+    });
+  }
+
+  function select(task, attempt) {
+    state.task = task; state.attempt = attempt;
+    history.replaceState(null, "", "#" + state.run + "/" + task + "/" + attempt);
+    renderGrid(); renderDetail(true);
+  }
+
+  // ---------- attempt detail ----------
+  function renderDetail(flash) {
+    const box = $("detail");
+    const t = tasks[state.task];
+    const atts = runs[state.run].attempts[state.task] || [];
+    const a = atts.find((x) => x.attempt === state.attempt) || atts[0];
+    box.replaceChildren();
+    if (!a) { box.append(el("p", { class: "none", style: "padding:20px" }, "No attempts for this task in this run.")); return; }
+
+    const verdict = a.pass ? el("span", { class: "tag ok" }, "✓ Database: passed") : el("span", { class: "tag bad" }, "✕ Database: failed");
+    const said = a.outcome === "SUCCESS" ? "Agent said: success" : a.outcome === "FAILED" ? "Agent said: failed"
+      : a.finish === "stop" ? "Agent stopped without a verdict" : "Agent hit the step limit";
+    box.append(el("div", { class: "dhead" },
+      el("h3", {}, human(t.id) + ", attempt " + (a.attempt + 1) + " of " + atts.length),
+      el("div", { class: "pills" }, verdict,
+        el("span", { class: "tag " + (a.claimed && !a.pass ? "bad" : "plain") }, said),
+        a.signature ? el("span", { class: "tag plain" }, "Failure: " + a.signature.replace(/_/g, " ")) : null,
+        runs[state.run].variant !== "none" ? el("span", { class: "tag plain" }, runs[state.run].label) : null)));
+
+    // left: the conversation
+    const left = el("div", {}, el("h4", {}, "Conversation"));
+    a.events.forEach((e) => {
+      if (e.t === "customer") left.append(el("div", { class: "ev customer" }, el("span", { class: "who" }, "Customer"), e.text));
+      else if (e.t === "agent") left.append(el("div", { class: "ev agent" }, el("span", { class: "who" }, "Agent"), el("p", {}, e.text)));
+      else left.append(el("div", { class: "ev call" + (e.error ? " err" : "") },
+        el("div", { class: "sig mono" }, el("span", { class: "name" }, e.name), "(" + JSON.stringify(e.args) + ")"),
+        el("details", {}, el("summary", {}, e.error ? "Tool returned an error" : "Tool result"), el("pre", { class: "mono" }, e.result))));
+    });
+
+    // right: what the database recorded
+    const right = el("div", {}, el("h4", {}, "What the database recorded"));
+    if (!a.changes.length) right.append(el("p", { class: "none" }, "Nothing changed. Not even a reply to the customer."));
+    a.changes.forEach((c) => right.append(el("div", { class: "change mono " + c.kind }, c.text,
+      el("span", { class: "why" }, c.kind === "forbidden" ? "Forbidden for this task" : c.kind === "required" ? "Required, and done" : "Allowed, not required"))));
+    if (a.missing.length) {
+      right.append(el("h4", {}, "Required but missing"));
+      a.missing.forEach((m) => right.append(el("div", { class: "missing mono" }, m)));
+    }
+    right.append(el("h4", {}, "What this task requires"),
+      el("ul", { class: "spec mono" }, t.required.map((r) => el("li", {}, r))));
+    if (t.forbidden.length) right.append(el("h4", {}, "What this task forbids"),
+      el("ul", { class: "spec mono" }, t.forbidden.map((r) => el("li", {}, r))));
+    if (a.judge) {
+      right.append(el("h4", {}, "What the LLM judge decided"));
+      for (const [view, name] of [["full", "Reading every tool call"], ["reply", "Reading only the chat"]]) {
+        const j = a.judge[view]; if (!j) continue;
+        const right_ = (j.verdict === "PASS") === a.pass;
+        right.append(el("div", { class: "judge" },
+          el("span", { class: "tag " + (right_ ? "ok" : "bad") }, name + ": " + j.verdict + (right_ ? ", correct" : ", wrong")),
+          el("p", {}, j.reason)));
+      }
+    }
+    right.append(el("p", { class: "facts" }, a.steps + " steps, " + a.seconds.toFixed(1) + " s, " + a.tokens.toLocaleString() + " tokens."));
+
+    box.append(el("div", { class: "dbody" }, left, right));
+    if (flash) { box.classList.remove("flash"); void box.offsetWidth; box.classList.add("flash"); }
+  }
+
+  // ---------- checking the checkers ----------
+  function renderTables() {
+    const jb = $("judge-box");
+    if (D.judge.full || D.judge.reply) {
+      const model = (D.judge.full || D.judge.reply).model;
+      jb.append(el("h3", {}, "An LLM judge"),
+        el("p", {}, "A second model (" + model + ") read each main-run attempt and said PASS or FAIL."),
+        el("div", { class: "scroll" }, el("table", {},
+          el("thead", {}, el("tr", {}, el("th", {}, "Judge sees"), el("th", { class: "num" }, "Approved failing runs"), el("th", { class: "num" }, "κ"))),
+          el("tbody", {}, [["full", "Every tool call"], ["reply", "Only the chat"]].filter(([v]) => D.judge[v]).map(([v, name]) =>
+            el("tr", {}, el("td", {}, name), el("td", { class: "num" }, pct(D.judge[v].judge_passed_db_wrong)),
+              el("td", { class: "num" }, D.judge[v].kappa.toFixed(2))))))));
+    }
+    const pb = $("probe-box");
+    if (D.probes.length) {
+      pb.append(el("h3", {}, "Changing what the agent sees"),
+        el("p", {}, "Change in pass@1 versus the main run, in points. The name-matching grader checks tool calls by name, as many benchmarks do."),
+        el("div", { class: "scroll" }, el("table", {},
+          el("thead", {}, el("tr", {}, el("th", {}, "Run"), el("th", { class: "num" }, "Database"), el("th", { class: "num" }, "Name grader"))),
+          el("tbody", {}, D.probes.map((p) => el("tr", {},
+            el("td", {}, p.label),
+            ...["state", "name"].map((g) => el("td", { class: "num" }, pts(p[g].delta) + " ",
+              el("span", { class: "tag " + (p[g].effect ? "bad" : "plain") }, p[g].effect ? "real effect" : "within noise")))))))));
+    }
+  }
+
+  function renderAll() {
+    history.replaceState(null, "", "#" + state.run + "/" + state.task + "/" + state.attempt);
+    renderSwitch(); renderGrid(); renderDetail(false);
+  }
+  window.addEventListener("hashchange", () => { if (fromHash()) { renderAll(); $("detail").focus(); } });
+  renderTables();
+  renderAll();
+})();
+</script>
+</body>
+</html>

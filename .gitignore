@@ -4,3 +4,4 @@ __pycache__/
 run/*.jsonl
 *.db
 .env
+build/

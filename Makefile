@@ -5,6 +5,8 @@
 #   make judge           LLM-judge audit (full and reply views)
 #   make probes          control + rename + reformat + misleading runs (~90 min)
 #   make probe-report    compare the probes against the main run
+#   make site            rebuild the results explorer in docs/ (GitHub Pages)
+#   make dataset         package tasks + run logs for Hugging Face in build/hf_dataset
 #   make all             everything above, in order
 
 PY      ?= python
@@ -14,10 +16,10 @@ K       ?= 5
 RUN     := runs/main_k$(K).jsonl
 BENCH   := $(PY) -m agent.run_bench --model $(MODEL) --k $(K)
 
-.PHONY: help install test reset run eval judge probes probe-report all
+.PHONY: help install test reset run eval judge probes probe-report site dataset all
 
 help:
-	@sed -n '2,8p' Makefile
+	@sed -n '2,10p' Makefile
 
 install:
 	$(PY) -m pip install -r requirements.txt
@@ -52,4 +54,10 @@ probe-report:
 		reformat=runs/probe_reformat_k$(K).jsonl \
 		misleading=runs/probe_misleading_k$(K).jsonl
 
-all: test run eval judge probes probe-report
+site:
+	$(PY) -m app.build_site --k $(K)
+
+dataset:
+	$(PY) -m app.build_dataset
+
+all: test run eval judge probes probe-report site
