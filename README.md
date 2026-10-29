@@ -2,6 +2,8 @@
 
 **Agents say "done." The database often disagrees.**
 
+**[Explore every attempt →](https://vatsalroy.github.io/agent-reliability-bench/)** 
+
 A small, reproducible harness that grades a tool-using LLM agent by **what actually changed in the database**, not by what the agent says it did. Every task runs 5 times on a fresh database, so the results measure *reliability* as well as success. The same harness then audits two cheaper ways of grading agents: an LLM judge, and a grader that matches tool names.
 
 Everything runs locally and free: a 4B model (`qwen3.5:4b-mlx`) on a MacBook Air via Ollama.
