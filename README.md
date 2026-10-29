@@ -29,16 +29,16 @@ Everything runs locally and free: a 4B model (`qwen3.5:4b-mlx`) on a MacBook Air
 
 ```mermaid
 flowchart LR
-    T[tasks/tasks.yaml<br/>17 tasks] --> R[agent/run_bench.py]
-    R -->|fresh copy per attempt| DB[(SQLite shop)]
-    R --> A[ReAct agent loop<br/>qwen3.5:4b via Ollama]
-    A <-->|8 tools| DB
-    DB -->|snapshot before / after| C[eval/checker.py<br/>row-level diff]
-    C --> L[runs/*.jsonl<br/>full trajectories]
-    L --> M[metrics.py<br/>pass@k, pass^k, CIs, cost]
-    L --> J[judge.py<br/>LLM judge vs DB]
-    L --> P[probes.py<br/>rename / reformat / control]
-    L --> F[failures.py<br/>failure signatures]
+    T["tasks/tasks.yaml<br/>17 tasks"] --> R["agent/run_bench.py"]
+    R -->|"fresh copy per attempt"| DB[("SQLite shop")]
+    R --> A["ReAct agent loop<br/>qwen3.5:4b via Ollama"]
+    A <-->|"8 tools"| DB
+    DB -->|"snapshot before / after"| C["eval/checker.py<br/>row-level diff"]
+    C --> L["runs/*.jsonl<br/>full trajectories"]
+    L --> M["metrics.py<br/>pass@k, pass^k, CIs, cost"]
+    L --> J["judge.py<br/>LLM judge vs DB"]
+    L --> P["probes.py<br/>rename / reformat / control"]
+    L --> F["failures.py<br/>failure signatures"]
 ```
 
 - **The shop** (`env/`): a SQLite database with customers, orders, tickets, refunds, and replies; a short refund policy; and 8 tools (`get_order`, `issue_refund`, `send_reply`, ...). The tools do **not** enforce the policy, just as a real back office lets you break the rules. Catching that is the checker's job.
