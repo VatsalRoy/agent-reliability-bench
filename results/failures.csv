@@ -1,9 +1,5 @@
-signature,family,count,share
-step_limit,tool_use,0,0.0
-no_state_change,tool_use,15,0.5
-policy_violation,decision,10,0.3333
-tool_error_unrecovered,tool_use,0,0.0
-duplicate_effect,tool_use,0,0.0
-wrong_value,decision,4,0.1333
-no_reply_sent,tool_use,0,0.0
-missing_effect,tool_use,1,0.0333
+signature,thinkingbox_category,count,share
+no_state_change,incomplete_resolution,15,0.5
+policy_violation,wrong_state_update,10,0.3333
+wrong_value,wrong_state_update,4,0.1333
+missing_effect,no_state_changing_action,1,0.0333

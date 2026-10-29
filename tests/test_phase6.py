@@ -8,7 +8,7 @@ import pytest
 from agent.react_agent import prompt_hash, run_attempt
 from agent.variants import BASE, VARIANTS, Variant
 from eval.checker import load_tasks
-from eval.failures import classify, family, report as fail_report, tally, write_outputs as fail_write
+from eval.failures import category, classify, report as fail_report, tally, write_outputs as fail_write
 from eval.judge import agreement, judge_prompt, parse_verdict, transcript
 from eval.probes import compare, name_match_grade, report as probe_report, write_outputs as probe_write
 from tests.test_agent import Scripted, out
@@ -164,15 +164,29 @@ def test_passing_run_has_no_signature():
     assert classify(rec) is None
 
 
-def test_families():
-    assert family("policy_violation") == "decision" and family("no_reply_sent") == "tool_use"
+def test_thinkingbox_categories():
+    def cat(task_id, calls):
+        rec = attempt(task_id, calls)
+        return category(rec, classify(rec))
+
+    refund = ("issue_refund", {"order_id": 101, "amount": 120, "reason": "damaged"})
+    assert cat("trap_change_of_mind_standard",
+               [("issue_refund", {"order_id": 108, "amount": 35, "reason": "x"}), REPLY]) == "wrong_state_update"
+    assert cat("refund_damaged_gold", [refund]) == "incomplete_resolution"               # no reply
+    assert cat("lookup_status_processing", []) == "incomplete_resolution"                # answered in chat
+    assert cat("refund_damaged_gold", []) == "no_state_changing_action"                 # refund never made
+    assert cat("late_gold_update_existing_ticket",
+               [("issue_refund", {"order_id": 107, "amount": 60, "reason": "late"}), REPLY]) == "no_state_changing_action"
+    assert cat("refund_damaged_gold", [("issue_refund", {"order_id": 101}), REPLY]) == "tool_usage"
+    assert cat("lookup_eta_shipped", [("send_reply", {"message": "Soon!"})]) == "incomplete_resolution"
 
 
 def test_tally_and_outputs(tmp_path):
     recs = [attempt("refund_damaged_gold", []), attempt("trap_refund_too_old", [REPLY, REPLY]),
             attempt("trap_refund_too_old", [REPLY])]
     t = tally(recs)
-    assert t["failed"] == 2 and t["families"]["tool_use"] == 2
+    assert t["failed"] == 2
+    assert t["categories"]["no_state_changing_action"] == 1 and t["categories"]["incomplete_resolution"] == 1
     assert "no_state_change" in fail_report(t)
     assert fail_write(t, tmp_path).stat().st_size > 10_000
 

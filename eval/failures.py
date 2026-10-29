@@ -16,12 +16,18 @@ Each failed attempt gets exactly one signature, checked in this order:
                           (often: answered in chat instead)
   missing_effect          skipped a required change (e.g. left a ticket open)
 
-Families, to compare with ThinkingBox's "most failures are tool handling":
-  decision  the agent used the tools but decided wrong:
-            policy_violation, wrong_value
-  tool_use  the agent didn't carry out the work through the tools:
-            everything else
-This split is our own definition, so the comparison with ThinkingBox is loose.
+Each signature is also mapped to ThinkingBox's four failure categories
+(Li et al., arXiv 2608.19741), so the two can be compared directly:
+  tool_usage               failed to recover from tool errors / no progress
+                           (tool_error_unrecovered, step_limit)
+  no_state_changing_action omitted a required create/update/cancel/refund
+                           (missing_effect; no_state_change when a non-reply
+                           change was required)
+  incomplete_resolution    the customer wasn't properly answered: no reply,
+                           two replies, or a reply missing required info
+  wrong_state_update       a change was made but the resulting state is wrong
+                           (policy_violation, wrong_value on a non-reply table)
+The mapping is our reading of their definitions.
 """
 
 import argparse
@@ -34,11 +40,22 @@ from eval.checker import effect_matches
 
 ORDER = ["step_limit", "no_state_change", "policy_violation", "tool_error_unrecovered",
          "duplicate_effect", "wrong_value", "no_reply_sent", "missing_effect"]
-DECISION = {"policy_violation", "wrong_value"}
+CATEGORIES = ["tool_usage", "no_state_changing_action", "incomplete_resolution", "wrong_state_update"]
 
 
-def family(signature: str) -> str:
-    return "decision" if signature in DECISION else "tool_use"
+def category(record: dict, signature: str) -> str:
+    """Map a signature to a ThinkingBox failure category."""
+    missing_tables = {m["table"] for m in record["checker"]["missing"]}
+    only_reply = missing_tables <= {"replies"}
+    if signature in ("tool_error_unrecovered", "step_limit"):
+        return "tool_usage"
+    if signature == "policy_violation":
+        return "wrong_state_update"
+    if signature in ("no_reply_sent", "duplicate_effect", "wrong_value", "no_state_change"):
+        if only_reply:
+            return "incomplete_resolution"
+        return "no_state_changing_action" if signature == "no_state_change" else "wrong_state_update"
+    return "no_state_changing_action"  # missing_effect
 
 
 def classify(record: dict) -> str | None:
@@ -75,13 +92,16 @@ def classify(record: dict) -> str | None:
 
 def tally(records: list[dict]) -> dict:
     failed = [r for r in records if not r["verified_success"]]
-    sigs = Counter(classify(r) for r in failed)
-    fams = Counter(family(s) for s in sigs.elements())
-    by_task = {}
+    sigs, cats, pairs, by_task = Counter(), Counter(), Counter(), {}
     for r in failed:
-        by_task.setdefault(r["task_id"], Counter())[classify(r)] += 1
+        sig = classify(r)
+        cat = category(r, sig)
+        sigs[sig] += 1
+        cats[cat] += 1
+        pairs[(sig, cat)] += 1
+        by_task.setdefault(r["task_id"], Counter())[sig] += 1
     return {"failed": len(failed), "total": len(records), "signatures": sigs,
-            "families": fams, "by_task": by_task}
+            "categories": cats, "pairs": pairs, "by_task": by_task}
 
 
 def report(t: dict) -> str:
@@ -89,10 +109,10 @@ def report(t: dict) -> str:
     lines = [f"{t['failed']} failed attempts out of {t['total']}", "", "SIGNATURES"]
     for sig in ORDER:
         if t["signatures"][sig]:
-            lines.append(f"  {sig:<24} {t['signatures'][sig]:>3}  ({t['signatures'][sig] / n:.0%})  [{family(sig)}]")
-    lines += ["", "FAMILIES"]
-    for fam in ("tool_use", "decision"):
-        lines.append(f"  {fam:<24} {t['families'][fam]:>3}  ({t['families'][fam] / n:.0%})")
+            lines.append(f"  {sig:<24} {t['signatures'][sig]:>3}  ({t['signatures'][sig] / n:.0%})")
+    lines += ["", "THINKINGBOX CATEGORIES"]
+    for cat in CATEGORIES:
+        lines.append(f"  {cat:<26} {t['categories'][cat]:>3}  ({t['categories'][cat] / n:.0%})")
     lines += ["", "BY TASK"]
     for task, c in sorted(t["by_task"].items()):
         lines.append(f"  {task:<34} " + ", ".join(f"{s} x{k}" for s, k in c.most_common()))
@@ -103,10 +123,9 @@ def write_outputs(t: dict, out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     with open(out_dir / "failures.csv", "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["signature", "family", "count", "share"])
-        for sig in ORDER:
-            w.writerow([sig, family(sig), t["signatures"][sig],
-                        round(t["signatures"][sig] / (t["failed"] or 1), 4)])
+        w.writerow(["signature", "thinkingbox_category", "count", "share"])
+        for (sig, cat), c in sorted(t["pairs"].items(), key=lambda kv: (ORDER.index(kv[0][0]), kv[0][1])):
+            w.writerow([sig, cat, c, round(c / (t["failed"] or 1), 4)])
 
     import matplotlib
     matplotlib.use("Agg")
@@ -115,13 +134,16 @@ def write_outputs(t: dict, out_dir: Path) -> Path:
 
     from eval.metrics import BLUE, GRID, INK, INK_2, ORANGE, SURFACE
 
-    rows = [(s, t["signatures"][s]) for s in ORDER if t["signatures"][s]]
-    rows.sort(key=lambda r: r[1])
-    colors = {"tool_use": BLUE, "decision": ORANGE}
-    fig, ax = plt.subplots(figsize=(7, 0.5 * len(rows) + 1.6), facecolor=SURFACE)
+    # Fixed categorical slots, one per ThinkingBox category (never reordered).
+    colors = dict(zip(CATEGORIES, [BLUE, ORANGE, "#1baf7a", "#eda100"]))
+    rows = sorted(t["pairs"].items(), key=lambda kv: kv[1])
+    labels = [f"{sig.replace('_', ' ')}" for (sig, _), _ in rows]
+    if len(set(labels)) != len(labels):  # same signature in two categories
+        labels = [f"{sig.replace('_', ' ')} ({cat.replace('_', ' ')})" for (sig, cat), _ in rows]
+    fig, ax = plt.subplots(figsize=(7, 0.5 * len(rows) + 1.8), facecolor=SURFACE)
     ax.set_facecolor(SURFACE)
-    ax.barh([r[0].replace("_", " ") for r in rows], [r[1] for r in rows], height=0.5,
-            color=[colors[family(r[0])] for r in rows], zorder=2)
+    ax.barh(labels, [c for _, c in rows], height=0.5,
+            color=[colors[cat] for (_, cat), _ in rows], zorder=2)
     for i, (_, v) in enumerate(rows):
         ax.text(v + 0.15, i, str(v), va="center", color=INK, fontsize=10)
     for side in ("top", "right", "bottom"):
@@ -131,10 +153,10 @@ def write_outputs(t: dict, out_dir: Path) -> Path:
     ax.xaxis.grid(True, color=GRID, linewidth=0.8)
     ax.set_axisbelow(True)
     ax.set_xlabel("failed attempts", color=INK_2)
-    fam = t["families"]
-    ax.legend(handles=[Patch(color=BLUE, label=f"tool use ({fam['tool_use']})"),
-                       Patch(color=ORANGE, label=f"decision ({fam['decision']})")],
-              frameon=False, loc="lower right", labelcolor=INK)
+    cats = t["categories"]
+    ax.legend(handles=[Patch(color=colors[c], label=f"{c.replace('_', ' ')} ({cats[c]})") for c in CATEGORIES],
+              title="ThinkingBox category", title_fontsize=9, frameon=False, loc="lower right",
+              labelcolor=INK, fontsize=9)
     ax.set_title(f"Why the agent failed ({t['failed']} failed attempts)", loc="left", color=INK, fontsize=12)
     fig.tight_layout()
     path = out_dir / "figures" / "failures.png"
